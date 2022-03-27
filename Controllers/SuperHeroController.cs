@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using superhero.Data;
@@ -10,37 +11,29 @@ namespace superhero.Controllers;
 public class SuperHeroController : ControllerBase
 {
     private readonly DataContext _context;
-    public SuperHeroController(DataContext context)
+    private readonly ILogger<SuperHeroController> _logger;
+
+    public SuperHeroController(ILogger<SuperHeroController> logger , DataContext context)
     {
         _context = context;
+        _logger = logger;
     }
-
-    private static List<SuperHero> herous = new List<SuperHero>
-        {
-            new SuperHero {Id = 1,
-             Name = "Spider Man",
-             FirstName = "Peter ",
-             LastName = "Parker",
-             Place = "New York City"},
-
-             new SuperHero {Id = 1,
-             Name = "Spider ",
-             FirstName = "Jonny ", 
-             LastName = "Hard",
-             Place = "Oclaxoma City"}
-        };
-
+    
+   
     [HttpGet]
-    public async Task<ActionResult<List<SuperHero>>> Get()
+    public async Task<ActionResult> Get()
     {
-        return Ok(await _context.SuperHeros.ToListAsync());
+
+        return Ok(await _context.SuperHeros.Where(x=> x.Name == "Database").ToListAsync());
+
     }
 
-    [HttpGet("{id}")]
-    public ActionResult<SuperHero> Get(int id)
+     [HttpGet("{id}")]
+    public async  Task<ActionResult> Get(int id)
     {
-        var hero = herous.Find(h=> h.Id == id);
-
+     
+        var hero = await _context.SuperHeros.FirstOrDefaultAsync(i=>i.Id == id);
+      
         if(hero==null)
         {
             return BadRequest("Hero not found");
@@ -52,18 +45,46 @@ public class SuperHeroController : ControllerBase
 
 
     [HttpPost]
-    public ActionResult<List<SuperHero>> AddHero([FromForm]SuperHero hero)
+    public async Task<ActionResult> AddHero([FromForm]NewSuperHero hero)
     {
-        herous.Add(hero);
-        return Ok(herous);
+        var heroues = new SuperHero(
+            id : hero.Id,
+            name: hero.Name,
+            firstName: hero.FirstName,
+            lastName: hero.LastName,
+            place: hero.Place
+        );
+
+           try
+            {
+                await _context.SuperHeros.AddAsync(heroues);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"New hero added with ID: {heroues.Id}");
+
+                return Ok(new
+                {
+                     id = hero.Id,
+                    name = hero.Name,
+                    firstName = hero.FirstName,
+                    lastName = hero.LastName,
+                    place = hero.Place
+                });
+            }
+            catch(Exception e)
+            {
+                _logger.LogWarning($"Error occured while saving user to DB:\n{e.Message}");
+                return StatusCode(500, new { errorMessage = e.Message });
+            }
     }
 
 
     [HttpPut]
-    public ActionResult<List<SuperHero>> UpdateHero([FromForm]SuperHero request)
+    public async Task<ActionResult> UpdateHero([FromForm]SuperHero request)
     {
-        var hero = herous.Find(h=> h.Id == request.Id);
-
+       
+        var hero = await _context.SuperHeros.FirstOrDefaultAsync(i=>i.Id == request.Id);
+       
         if(hero==null)
         {
             return BadRequest("Hero not found");
@@ -74,20 +95,25 @@ public class SuperHeroController : ControllerBase
         hero.LastName = request.LastName;
         hero.Place = request.Place;
 
+       var herous = _context.SuperHeros.Update(hero);
+        await _context.SaveChangesAsync();
+
         return Ok(herous);
     }
 
     [HttpDelete("{id}")]
-    public ActionResult<List<SuperHero>> DeleteHero(int id)
+    public async Task<ActionResult> DeleteHero(int id)
     {
-        var hero = herous.Find(h=> h.Id == id);
+     
+       var hero = await _context.SuperHeros.FirstOrDefaultAsync(i=>i.Id == id);
 
         if(hero==null)
         {
             return BadRequest("Hero not found");
         }
 
-        herous.Remove(hero);
+        _context.SuperHeros.Remove(hero);
+      
         return Ok(hero);
     }
 
